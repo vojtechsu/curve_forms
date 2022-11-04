@@ -1,4 +1,4 @@
-from sage.all import EllipticCurve, GF, ZZ, PolynomialRing, sqrt
+from sage.all import EllipticCurve, GF, ZZ, PolynomialRing, sqrt, EllipticCurve_from_j
 from abc import ABC, abstractmethod
 
 def weier_to_mont(a,b,x,y):
@@ -66,6 +66,8 @@ def weier_to_edwar(a,b,x,y):
     for alpha,ex in (z**3+a*z+b).roots():
         if (3*alpha**2+a).is_square():
             s = 1/(sqrt(3*alpha**2+a))
+            if not (s/(3*s*alpha+2)).is_square():
+                continue
             t = sqrt(s/(3*s*alpha+2))
             t = t if ZZ(t)<ZZ(p-t) else p-t
             C, D = t,-4*a-3*alpha**2
@@ -126,6 +128,25 @@ def test_twedw(P,Q,R):
 def test_mont(P,Q,R):
     test_formula(P,Q,R,weier_to_mont,mont_sum)
 
+def find_random_edwards(F:GF, cofactor = 4):
+    z = PolynomialRing(F,'z').gen()
+    p = F.order()
+    while True:
+        E = EllipticCurve_from_j(F.random_element())
+        a,b = E.a4(),E.a6()
+        for alpha,ex in (z**3+a*z+b).roots():
+            if (3*alpha**2+a).is_square():
+                s = 1/(sqrt(3*alpha**2+a))
+                if not (s/(3*s*alpha+2)).is_square():
+                    continue
+                order = E.order()
+                if order%cofactor!=0:continue
+                if not (order//cofactor).is_prime():continue
+                t = sqrt(s/(3*s*alpha+2))
+                t = t if ZZ(t)<ZZ(p-t) else p-t
+                c, d = t,-4*a-3*alpha**2
+                return Edwards(c,d)
+
 
 class Curve:
     @abstractmethod
@@ -151,6 +172,9 @@ class Curve:
     def negative(self,x,y,z):
         pass
 
+    @abstractmethod
+    def check_point(self,x,y,z=1):
+        pass
 
 class Weierstrass(Curve):
     def __init__(self,a: GF,b: GF):
@@ -177,8 +201,25 @@ class Weierstrass(Curve):
     def form(self):
         return "Weierstrass"
 
+    def __repr__(self):
+        return f"Weierstrass curve y^2=x^3+{self.a}x+{self.b} over F_{self.field.order()}"
+
     def negative(self,point):
         return Point(self,point.x,-point.y,point.z)
+
+    def to_edwards(self,point=None):
+        x,y = (self.field(1),self.field(1)) if point is None else (point.x,point.y)
+        ed = weier_to_edwar(self.a,self.b,x,y)
+        if ed is None:
+            return
+        c,d,x,y = ed
+        edward = Edwards(c,d)
+        if point is None:
+            return edward
+        return Point(edward,x,y)
+
+    def check_point(self,x,y,z=1):
+        return y**2*z==x**3+self.a*x*z**2+self.b*z**3
 
 
 
@@ -214,6 +255,10 @@ class Montgomery(Curve):
     def negative(self,point):
         return Point(self,point.x,-point.y,point.z)
 
+    def check_point(self,x,y,z=1):
+        return self.b*y**2*z==x**3+self.a*x**2*z+x*z**2
+
+
 class TwistedEdwards(Curve):
     def __init__(self,a: GF,d: GF):
         self.a = a
@@ -235,6 +280,10 @@ class TwistedEdwards(Curve):
 
     def negative(self,point):
         return Point(self,-point.x,point.y,point.z)
+
+    def check_point(self,x,y,z=1):
+        return self.a*x**2+y**2==1+self.d*x**2*y**2
+
 
 class Edwards(Curve):
     def __init__(self,c: GF,d: GF):
@@ -258,6 +307,39 @@ class Edwards(Curve):
     def negative(self,point):
         return Point(self,-point.x,point.y,point.z)
 
+    def __repr__(self):
+        return f"Edwards curve x^2+y^2={self.c}^2(1+{self.d}x^2y^2) over F_{self.field.order()}"
+
+    def check_point(self,x,y,z=1):
+        return x**2+y**2==self.c**2*(1+self.d*x**2*y**2)
+
+    def lift_y(self,y):
+        x = PolynomialRing(self.field,'x').gen()
+        roots = (x**2+y**2-self.c**2*(1+self.d*x**2*y**2)).roots()
+        if roots==[]:
+            raise Exception("No such point")
+        return Point(self,roots[0][0],y)
+
+    def __iter__(self):
+        for y in self.field:
+            try:
+                point = self.lift_y(y)
+                yield point
+                if not point.x==0: yield -point
+            except:
+                continue
+
+    def to_weierstrass(self,point=None):
+        x,y = (self.field(1),self.field(1)) if point is None else (point.x,point.y)
+        we = edwar_to_weier(self.c,self.d,x,y)
+        if we is None:
+            return
+        a,b,x,y = we
+        weier = Weierstrass(a,b)
+        if point is None:
+            return weier
+        return Point(weier,x,y)
+
 
 
 
@@ -268,6 +350,7 @@ class Point:
         self.z = z
         self.field = x.parent()
         self.curve = curve
+        if not self.curve.check_point(x,y,z): raise Exception("Point is not on the curve")
 
     def is_infinity(self):
         return self.curve.is_infinity(self.x,self.y,self.z)
@@ -276,6 +359,8 @@ class Point:
         return self.curve.addition(self,other)
 
     def __rmul__(self,scalar):
+        if scalar<0:
+            return (-scalar)*(-self)
         accumulator = self.curve.infinity()
         temp = self
         while scalar>0:
@@ -289,13 +374,22 @@ class Point:
         return self.curve==other.curve and self.x==other.x and self.y==other.y and self.z==other.z
 
     def __repr__(self):
-        return f"({self.x},{self.y},{self.z}) on {self.curve.form()} curve"
+        return f"({self.x},{self.y},{self.z})"
 
     def __neg__(self):
         return self.curve.negative(self)
 
     def __sub__(self,other):
         return self+(-other)
+
+    def to_weierstrass(self):
+        if self.curve.form()=="Weierstrass":
+            return self
+        return self.curve.to_weierstrass(self)
+
+    def sage_point(self):
+        assert self.curve.form()=="Weierstrass"
+        return self.curve.sage_curve(self.x,self.y,self.z)
 
 
 def test_weierstrass():
