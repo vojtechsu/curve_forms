@@ -134,7 +134,7 @@ def find_random_edwards(F:GF, cofactor = 4):
     while True:
         E = EllipticCurve_from_j(F.random_element())
         a,b = E.a4(),E.a6()
-        for alpha,ex in (z**3+a*z+b).roots():
+        for alpha,_ in (z**3+a*z+b).roots():
             if (3*alpha**2+a).is_square():
                 s = 1/(sqrt(3*alpha**2+a))
                 if not (s/(3*s*alpha+2)).is_square():
@@ -146,6 +146,42 @@ def find_random_edwards(F:GF, cofactor = 4):
                 t = t if ZZ(t)<ZZ(p-t) else p-t
                 c, d = t,-4*a-3*alpha**2
                 return Edwards(c,d)
+
+def find_random_weierstrass(F:GF,cofactor=1,a=None,b=None):
+    while True:
+        if a is not None:
+            try:
+                E = EllipticCurve(F,[a,F.random_element()])
+            except ArithmeticError:
+                continue
+        if b is not None:
+            try:
+                E = EllipticCurve(F,[F.random_element(),b])
+            except ArithmeticError:
+                continue
+        if a is None and b is None:
+            E = EllipticCurve_from_j(F.random_element())
+        if cofactor is None:
+            return Weierstrass(E.a4(),E.a6())
+        order = E.order()
+        if order%cofactor!=0:continue
+        if not (order//cofactor).is_prime():continue
+        return Weierstrass(E.a4(),E.a6())
+
+
+def find_random_twistededwards(F: GF, cofactor = 4):
+    z = PolynomialRing(F,'z').gen()
+    while True:
+        E = EllipticCurve_from_j(F.random_element())
+        a,b = E.a4(),E.a6()
+        for alpha,_ in (z**3+a*z+b).roots():
+            if (3*alpha**2+a).is_square():
+                s = 1/(sqrt(3*alpha**2+a))
+                order = E.order()
+                if order%cofactor!=0:continue
+                if not (order//cofactor).is_prime():continue
+                a,d = 3*alpha+2/s, 3*alpha-2/s
+                return TwistedEdwards(a,d)
 
 
 class Curve:
@@ -175,6 +211,14 @@ class Curve:
     @abstractmethod
     def check_point(self,x,y,z=1):
         pass
+
+    @abstractmethod
+    def __iter__(self):
+        pass
+
+
+class NoPoint(Exception):
+    pass
 
 class Weierstrass(Curve):
     def __init__(self,a: GF,b: GF):
@@ -220,6 +264,10 @@ class Weierstrass(Curve):
 
     def check_point(self,x,y,z=1):
         return y**2*z==x**3+self.a*x*z**2+self.b*z**3
+
+    def __iter__(self):
+        for point in self.sage_curve:
+            yield Point(self,point[0],point[1],point[2])
 
 
 
@@ -284,6 +332,42 @@ class TwistedEdwards(Curve):
     def check_point(self,x,y,z=1):
         return self.a*x**2+y**2==1+self.d*x**2*y**2
 
+    def __repr__(self):
+        return f"Twisted Edwards curve {self.a}x^2+y^2=1+{self.d}x^2y^2 over F_{self.field.order()}"
+
+
+    def lift_y(self,y):
+        x = PolynomialRing(self.field,'x').gen()
+        roots = (self.a*x**2+y**2-1-self.d*x**2*y**2).roots()
+        if roots==[]:
+            raise NoPoint("No such point")
+        return Point(self,roots[0][0],y)
+
+    def __iter__(self):
+        try:
+            for y in self.field:
+                try:
+                    point = self.lift_y(y)
+                    yield point
+                    if not point.x==0: yield -point
+                except NoPoint:
+                    continue
+        except GeneratorExit:
+                pass
+
+    def to_weierstrass(self,point=None):
+        x,y = (self.field(1),self.field(1)) if point is None else (point.x,point.y)
+        we = twedw_to_weier(self.a,self.d,x,y)
+        if we is None:
+            return
+        a,b,x,y = we
+        weier = Weierstrass(a,b)
+        if point is None:
+            return weier
+        return Point(weier,x,y)
+
+    
+
 
 class Edwards(Curve):
     def __init__(self,c: GF,d: GF):
@@ -317,20 +401,23 @@ class Edwards(Curve):
         x = PolynomialRing(self.field,'x').gen()
         roots = (x**2+y**2-self.c**2*(1+self.d*x**2*y**2)).roots()
         if roots==[]:
-            raise Exception("No such point")
+            raise NoPoint("No such point")
         return Point(self,roots[0][0],y)
 
     def __iter__(self):
-        for y in self.field:
-            try:
-                point = self.lift_y(y)
-                yield point
-                if not point.x==0: yield -point
-            except:
-                continue
+        try:
+            for y in self.field:
+                try:
+                    point = self.lift_y(y)
+                    yield point
+                    if not point.x==0: yield -point
+                except NoPoint:
+                    continue
+        except GeneratorExit:
+            pass
 
     def to_weierstrass(self,point=None):
-        x,y = (self.field(1),self.field(1)) if point is None else (point.x,point.y)
+        x,y = (self.field(1),self.field(2)) if point is None else (point.x,point.y)
         we = edwar_to_weier(self.c,self.d,x,y)
         if we is None:
             return
@@ -350,7 +437,7 @@ class Point:
         self.z = z
         self.field = x.parent()
         self.curve = curve
-        if not self.curve.check_point(x,y,z): raise Exception("Point is not on the curve")
+        if not self.curve.check_point(x,y,z): raise NoPoint("Point is not on the curve")
 
     def is_infinity(self):
         return self.curve.is_infinity(self.x,self.y,self.z)
