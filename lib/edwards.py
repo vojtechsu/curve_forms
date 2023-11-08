@@ -1,5 +1,5 @@
-from utils import GF, Curve
-from point import Point
+from utils import GF
+from point import Point, Curve
 
 
 class Edwards(Curve):

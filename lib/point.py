@@ -1,4 +1,46 @@
-from utils import GF, NoPoint, Curve
+from utils import GF
+from abc import ABC, abstractmethod
+
+
+class Curve:
+
+    params = None
+    field = None
+
+    @abstractmethod
+    def addition(self, point1, point2):
+        pass
+
+    @abstractmethod
+    def is_infinity(self, x, y, z):
+        pass
+
+    @abstractmethod
+    def infinity(self):
+        pass
+
+    @abstractmethod
+    def form(self):
+        pass
+
+    def point(self, x, y):
+        return Point(self, x, y)
+
+    @abstractmethod
+    def negative(self, x, y, z):
+        pass
+
+    @abstractmethod
+    def check_point(self, x, y, z=1):
+        pass
+
+    @abstractmethod
+    def __iter__(self):
+        pass
+
+    @abstractmethod
+    def __eq__(self, other):
+        return self.field == other.field and self.params == other.params
 
 
 class Point:
@@ -49,3 +91,7 @@ class Point:
     def affine(self):
         assert self.z != 0
         return Point(self.curve, self.x / self.z, self.y / self.z)
+
+
+class NoPoint(Exception):
+    pass

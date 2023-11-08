@@ -1,5 +1,5 @@
-from utils import Curve, GF, sqrt
-from point import Point
+from utils import GF, sqrt
+from point import Point, Curve
 
 
 class TwistedEdwards(Curve):

@@ -4,7 +4,7 @@ import edwards
 import twisted_edwards
 import montgomery
 from point import Point
-import birationa_equivalence as be
+import birational_equivalence as be
 
 
 class TestTransformations:

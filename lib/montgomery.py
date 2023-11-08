@@ -1,8 +1,8 @@
-from utils import GF, Curve
+from utils import GF
 import point as pt
 
 
-class Montgomery(Curve):
+class Montgomery(pt.Curve):
     def __init__(self, a: GF, b: GF):
         self.a = a
         self.b = b
