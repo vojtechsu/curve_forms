@@ -1,4 +1,4 @@
-from utils import Curve, sqrt, shortw_alpha_s_finder
+from utils import sqrt, shortw_alpha_s_finder
 from edwards import Edwards
 from weierstrass import Weierstrass
 from twisted_edwards import TwistedEdwards
@@ -7,7 +7,7 @@ import point as pt
 
 
 class BirationalEquivalence:
-    def __init__(self, domain: Curve, codomain: Curve):
+    def __init__(self, domain: pt.Curve, codomain: pt.Curve):
         self.domain = domain
         self.codomain = codomain
         self.domain_form = domain._form
@@ -20,7 +20,7 @@ class BirationalEquivalence:
         )
 
     @classmethod
-    def to_edwards(cls, domain: Curve):
+    def to_edwards(cls, domain: pt.Curve):
         source_form = domain._form
         assert source_form != "edward"
         module = __import__(__name__)
@@ -29,7 +29,7 @@ class BirationalEquivalence:
         return cls(domain, edward)
 
     @classmethod
-    def to_weierstrass(cls, domain: Curve):
+    def to_weierstrass(cls, domain: pt.Curve):
         source_form = domain._form
         assert source_form != "shortw"
         module = __import__(__name__)
@@ -38,7 +38,7 @@ class BirationalEquivalence:
         return cls(domain, shortw)
 
     @classmethod
-    def to_twisted_edwards(cls, domain: Curve):
+    def to_twisted_edwards(cls, domain: pt.Curve):
         source_form = domain._form
         assert source_form != "twiedw"
         module = __import__(__name__)
@@ -47,7 +47,7 @@ class BirationalEquivalence:
         return cls(domain, twiedw)
 
     @classmethod
-    def to_montgomery(cls, domain: Curve):
+    def to_montgomery(cls, domain: pt.Curve):
         source_form = domain._form
         assert source_form != "montgo"
         module = __import__(__name__)
