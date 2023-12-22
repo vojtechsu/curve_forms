@@ -1,5 +1,5 @@
-from utils import GF
-from point import Point, Curve
+from utils import GF, PolynomialRing
+from point import NoPoint, Point, Curve
 
 
 class Edwards(Curve):

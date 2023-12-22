@@ -1,7 +1,7 @@
 import sage.all as sage
 
 GF = sage.GF
-
+PolynomialRing = sage.PolynomialRing
 
 def shortw_alpha_s_finder(shortw: tuple, all=False):
     a, b = shortw
