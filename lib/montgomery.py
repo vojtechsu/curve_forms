@@ -1,4 +1,4 @@
-from utils import GF
+from utils import GF, PolynomialRing
 import point as pt
 
 
@@ -40,6 +40,13 @@ class Montgomery(pt.Curve):
 
     def check_point(self, x, y, z=1):
         return self.b * y**2 * z == x**3 + self.a * x**2 * z + x * z**2
+    
+    def lift_x(self, x):
+        y = PolynomialRing(self.field, "y").gen()
+        roots = (y**2 - (x**3+self.a*x**2+x)/self.b).roots()
+        if roots == []:
+            raise pt.NoPoint("No such point")
+        return pt.Point(self, x,roots[0][0])
 
 
 def montgo_sum(montgo: tuple, point1: tuple, point2: tuple):
